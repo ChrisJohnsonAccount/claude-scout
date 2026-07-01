@@ -1,7 +1,178 @@
 'use client';
 
 import { useState } from 'react';
-import { PipelineEntry, PipelineStage, Track, WorkModel, fitScoreColor, STAGE_COLORS, PIPELINE_STAGES, TRACKS, TRACK_COLORS, classifyTrack } from '@/lib/types';
+import { PipelineEntry, PipelineStage, Track, WorkModel, ContactActivity, ContactMethod, fitScoreColor, STAGE_COLORS, PIPELINE_STAGES, TRACKS, TRACK_COLORS, classifyTrack } from '@/lib/types';
+
+const CONTACT_METHODS: ContactMethod[] = ['Email', 'LinkedIn', 'Cell'];
+
+function ContactsSection({ contacts, onSave }: {
+  contacts: ContactActivity[];
+  onSave: (contacts: ContactActivity[]) => void;
+}) {
+  const [rows, setRows] = useState<ContactActivity[]>(contacts);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const inputClass = "w-full border border-gray-700 rounded px-2 py-1 text-xs bg-gray-900 text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500";
+
+  const addContact = () => {
+    const newRow: ContactActivity = {
+      id: crypto.randomUUID(),
+      contactName: '',
+      contactTitle: '',
+      lastContactDate: '',
+      method: 'Email',
+      notes: '',
+    };
+    const updated = [...rows, newRow];
+    setRows(updated);
+    setEditingId(newRow.id);
+  };
+
+  const updateField = (id: string, field: keyof ContactActivity, value: string) => {
+    setRows(r => r.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const saveRow = (currentRows: ContactActivity[]) => {
+    setEditingId(null);
+    onSave(currentRows);
+  };
+
+  const deleteRow = (id: string) => {
+    const updated = rows.filter(c => c.id !== id);
+    setRows(updated);
+    onSave(updated);
+  };
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contacts &amp; Activity</h3>
+
+      {rows.length > 0 && (
+        <div className="space-y-2 mb-2">
+          {rows.map(contact => (
+            editingId === contact.id ? (
+              <div key={contact.id} className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Contact Name</label>
+                    <input
+                      type="text"
+                      value={contact.contactName}
+                      onChange={e => updateField(contact.id, 'contactName', e.target.value)}
+                      placeholder="Jane Smith"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Contact Title</label>
+                    <input
+                      type="text"
+                      value={contact.contactTitle}
+                      onChange={e => updateField(contact.id, 'contactTitle', e.target.value)}
+                      placeholder="Hiring Manager"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Last Contact Date</label>
+                    <input
+                      type="date"
+                      value={contact.lastContactDate}
+                      onChange={e => updateField(contact.id, 'lastContactDate', e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Method</label>
+                    <select
+                      value={contact.method}
+                      onChange={e => updateField(contact.id, 'method', e.target.value as ContactMethod)}
+                      className={inputClass}
+                    >
+                      {CONTACT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Notes</label>
+                  <textarea
+                    value={contact.notes}
+                    onChange={e => updateField(contact.id, 'notes', e.target.value)}
+                    rows={2}
+                    placeholder="Details about the exchange…"
+                    className={`${inputClass} resize-none`}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => saveRow(rows)}
+                    className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { if (editingId && rows.find(c => c.id === editingId && !c.contactName && !c.contactTitle)) { deleteRow(contact.id); } else { setEditingId(null); } }}
+                    className="text-xs px-2.5 py-1 border border-gray-700 text-gray-400 rounded hover:text-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => deleteRow(contact.id)}
+                    className="text-xs text-red-500 hover:text-red-400 ml-auto"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div key={contact.id} className="bg-gray-800/40 border border-gray-700/60 rounded-lg px-3 py-2">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 grid grid-cols-4 gap-x-3 gap-y-0.5">
+                    <div>
+                      <span className="block text-gray-500 text-[10px] uppercase tracking-wide">Name</span>
+                      <span className="text-xs text-gray-200">{contact.contactName || <span className="text-gray-600">—</span>}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 text-[10px] uppercase tracking-wide">Title</span>
+                      <span className="text-xs text-gray-200">{contact.contactTitle || <span className="text-gray-600">—</span>}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 text-[10px] uppercase tracking-wide">Last Contact</span>
+                      <span className="text-xs text-gray-200">{contact.lastContactDate || <span className="text-gray-600">—</span>}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 text-[10px] uppercase tracking-wide">Method</span>
+                      <span className="text-xs text-gray-200">{contact.method}</span>
+                    </div>
+                    {contact.notes && (
+                      <div className="col-span-4 mt-1">
+                        <span className="block text-gray-500 text-[10px] uppercase tracking-wide">Notes</span>
+                        <span className="text-xs text-gray-400">{contact.notes}</span>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setEditingId(contact.id)}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0 mt-0.5"
+                  >
+                    Edit
+                  </button>
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={addContact}
+        className="text-xs px-2.5 py-1 border border-dashed border-gray-600 text-gray-400 rounded hover:border-gray-400 hover:text-gray-200 transition-colors"
+      >
+        + Add Contact &amp; Activity
+      </button>
+    </div>
+  );
+}
 
 const WORK_MODELS: WorkModel[] = ['In-office or hybrid', 'Remote'];
 
@@ -133,6 +304,13 @@ function RoleCard({ entry, onUpdate, onDelete, onDraftOutreach }: {
               rows={2}
               className="w-full text-sm border border-gray-700 rounded px-2 py-1.5 resize-none bg-gray-800 text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="Add notes…"
+            />
+          </div>
+
+          <div className="border-t border-gray-800 pt-3">
+            <ContactsSection
+              contacts={entry.contacts ?? []}
+              onSave={contacts => onUpdate({ contacts })}
             />
           </div>
 

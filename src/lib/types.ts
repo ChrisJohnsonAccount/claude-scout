@@ -23,6 +23,17 @@ export interface OutreachDraft {
   savedAt?: string;
 }
 
+export type ContactMethod = 'Email' | 'LinkedIn' | 'Cell';
+
+export interface ContactActivity {
+  id: string;
+  contactName: string;
+  contactTitle: string;
+  lastContactDate: string;
+  method: ContactMethod;
+  notes: string;
+}
+
 export interface PipelineEntry {
   id: string;
   title: string;
@@ -41,6 +52,7 @@ export interface PipelineEntry {
   snippet: string;
   notes: string;
   outreachDraft?: OutreachDraft;
+  contacts?: ContactActivity[];
   source: JobSource;
 }
 
