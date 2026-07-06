@@ -81,7 +81,7 @@ export default function SettingsTab({ settings, onSave }: Props) {
           <div>
             <label className={labelClass}>Jobs per Search</label>
             <select value={form.maxJobCount} onChange={e => set('maxJobCount', Number(e.target.value))} className={selectClass}>
-              {[3, 5, 7].map(n => <option key={n} value={n}>{n} jobs</option>)}
+              {[1, 3, 5, 7].map(n => <option key={n} value={n}>{n} {n === 1 ? 'job' : 'jobs'}</option>)}
             </select>
           </div>
           <div>
