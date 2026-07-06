@@ -21,9 +21,14 @@ export async function POST() {
     const existingKeys = new Set(
       pipeline.map(e => `${e.title.toLowerCase().trim()}|${e.company.toLowerCase().trim()}`)
     );
-    const existingList = existingKeys.size > 0
-      ? Array.from(existingKeys).map(k => `- ${k}`).join('\n')
-      : '(none yet)';
+    // Send only the 30 most recent to the prompt to keep token count bounded.
+    // Full deduplication still happens below against the complete existingKeys set.
+    const recentKeys = pipeline
+      .slice()
+      .sort((a, b) => b.addedDate.localeCompare(a.addedDate))
+      .slice(0, 30)
+      .map(e => `- ${e.title.toLowerCase().trim()}|${e.company.toLowerCase().trim()}`);
+    const existingList = recentKeys.length > 0 ? recentKeys.join('\n') : '(none yet)';
 
     const weightDesc = [
       `Role type match (weight ${settings.fitWeights.roleTypeMatch}/5)`,
