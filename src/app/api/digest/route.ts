@@ -33,28 +33,48 @@ export async function POST() {
       `Keyword match for "${settings.keywords}" (weight ${settings.fitWeights.keywordMatch}/5)`,
     ].join('\n');
 
-    const prompt = `Do ONE web search for currently-open job postings matching these criteria, then immediately return results as JSON. Do not do multiple searches.
+    const prompt = `You are a job search agent. Search for ${settings.maxJobCount} currently-open job postings that match the criteria below. Use targeted searches across multiple sources (LinkedIn, company career pages, Greenhouse, Lever, Workday) — not just job aggregators. Find direct links to the actual job posting pages, not search result pages.
 
 Role types (any of): ${settings.roleTypes.join(', ')}
-Location: ${settings.location} | Work model: ${settings.workModel}
-Company size: ≥${settings.minEmployees.toLocaleString()} employees
-Keywords: ${settings.keywords || '(none)'} | Exclude: ${settings.exclusions || '(none)'}
+Location: ${settings.location}
+Work model: ${settings.workModel}
+Company size: minimum ${settings.minEmployees.toLocaleString()} employees
+Keywords: ${settings.keywords || '(none)'}
+Exclude: ${settings.exclusions || '(none)'}
 
-Skip roles already in pipeline: ${existingList}
+Score each role 1–10 for fit:
+${weightDesc}
 
-Return up to ${settings.maxJobCount} results as a JSON array ONLY — no other text:
-[{"title":"","company":"","location":"","workModel":"In-office or hybrid","employeeCount":"","salary":"","url":"","posted":"","fitScore":7,"fitReason":"","snippet":""}]`;
+Skip roles already in pipeline (title|company):
+${existingList}
+
+Return ONLY a JSON array — no other text before or after:
+[
+  {
+    "title": "exact job title",
+    "company": "company name",
+    "location": "city, state",
+    "workModel": "In-office or hybrid",
+    "employeeCount": "e.g. 5,000–10,000",
+    "salary": "salary range or 'Competitive'",
+    "url": "direct URL to the job posting page",
+    "posted": "e.g. '3 days ago'",
+    "fitScore": 8,
+    "fitReason": "One sentence explaining the fit score.",
+    "snippet": "Two sentences summarizing the role."
+  }
+]`;
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }] as any,
+      max_tokens: 4096,
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: settings.maxJobCount + 2 }] as any,
       messages: [{ role: 'user', content: prompt }],
     });
 
     const fullText = message.content
-      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-      .map(b => b.text)
+      .filter(b => b.type === 'text')
+      .map(b => (b as any).text as string)
       .join('\n');
 
     if (!fullText) {
