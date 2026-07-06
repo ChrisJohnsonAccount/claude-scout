@@ -68,9 +68,9 @@ Search for real, currently-open positions. For each role found, return a JSON ar
 Return ONLY the JSON array. No other text before or after it.`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8096,
-      tools: [{ type: 'web_search_20260209', name: 'web_search' }] as any,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: Math.min(settings.maxJobCount * 2, 8) }] as any,
       messages: [{ role: 'user', content: prompt }],
     });
 
