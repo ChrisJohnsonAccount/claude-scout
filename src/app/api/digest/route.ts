@@ -70,7 +70,7 @@ Return ONLY the JSON array. No other text before or after it.`;
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 8096,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }] as any,
+      tools: [{ type: 'web_search_20260209', name: 'web_search' }] as any,
       messages: [{ role: 'user', content: prompt }],
     });
 
