@@ -33,55 +33,37 @@ export async function POST() {
       `Keyword match for "${settings.keywords}" (weight ${settings.fitWeights.keywordMatch}/5)`,
     ].join('\n');
 
-    const prompt = `You are a job search agent. Search the web for ${settings.maxJobCount} current, real job openings that match ALL of these criteria:
+    const prompt = `Do ONE web search for currently-open job postings matching these criteria, then immediately return results as JSON. Do not do multiple searches.
 
 Role types (any of): ${settings.roleTypes.join(', ')}
-Location: ${settings.location}
-Work model: ${settings.workModel}
-Company size: minimum ${settings.minEmployees.toLocaleString()} employees
-Include keywords: ${settings.keywords || '(none)'}
-Exclude: ${settings.exclusions || '(none)'}
+Location: ${settings.location} | Work model: ${settings.workModel}
+Company size: ≥${settings.minEmployees.toLocaleString()} employees
+Keywords: ${settings.keywords || '(none)'} | Exclude: ${settings.exclusions || '(none)'}
 
-Score each role 1–10 for fit using these weighted factors:
-${weightDesc}
+Skip roles already in pipeline: ${existingList}
 
-Skip any roles already in the pipeline (title|company):
-${existingList}
-
-Search for real, currently-open positions. For each role found, return a JSON array with this exact structure:
-[
-  {
-    "title": "exact job title from posting",
-    "company": "company name",
-    "location": "city, state",
-    "workModel": "In-office or hybrid",
-    "employeeCount": "e.g. 5,000–10,000",
-    "salary": "salary range from posting, or 'Competitive'",
-    "url": "direct URL to the job posting",
-    "posted": "e.g. '3 days ago' or '2025-05-10'",
-    "fitScore": 8,
-    "fitReason": "One sentence explaining fit score.",
-    "snippet": "Two sentences summarizing the role and what makes it interesting."
-  }
-]
-
-Return ONLY the JSON array. No other text before or after it.`;
+Return up to ${settings.maxJobCount} results as a JSON array ONLY — no other text:
+[{"title":"","company":"","location":"","workModel":"In-office or hybrid","employeeCount":"","salary":"","url":"","posted":"","fitScore":7,"fitReason":"","snippet":""}]`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: Math.min(settings.maxJobCount * 2, 8) }] as any,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }] as any,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const textBlock = message.content.find(b => b.type === 'text');
-    if (!textBlock || textBlock.type !== 'text') {
+    const fullText = message.content
+      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+      .map(b => b.text)
+      .join('\n');
+
+    if (!fullText) {
       return Response.json({ error: 'No text response from Claude' }, { status: 500 });
     }
 
     let rawJobs: any[];
     try {
-      rawJobs = extractJSON(textBlock.text);
+      rawJobs = extractJSON(fullText);
     } catch {
       return Response.json({ error: 'Could not parse job results from Claude' }, { status: 500 });
     }
