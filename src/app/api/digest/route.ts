@@ -5,6 +5,28 @@ import { PipelineEntry, classifyTrack } from '@/lib/types';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+interface SerperResult {
+  title: string;
+  link: string;
+  snippet: string;
+  date?: string;
+}
+
+async function serperSearch(query: string): Promise<SerperResult[]> {
+  const apiKey = process.env.SERPER_API_KEY;
+  if (!apiKey) throw new Error('SERPER_API_KEY is not configured in .env');
+
+  const res = await fetch('https://google.serper.dev/search', {
+    method: 'POST',
+    headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q: query, num: 10, gl: 'us', hl: 'en' }),
+  });
+
+  if (!res.ok) throw new Error(`Serper search failed: ${res.status}`);
+  const data = await res.json();
+  return (data.organic ?? []) as SerperResult[];
+}
+
 function extractJSON(text: string): any[] {
   const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlock) return JSON.parse(codeBlock[1].trim());
@@ -21,8 +43,7 @@ export async function POST() {
     const existingKeys = new Set(
       pipeline.map(e => `${e.title.toLowerCase().trim()}|${e.company.toLowerCase().trim()}`)
     );
-    // Send only the 30 most recent to the prompt to keep token count bounded.
-    // Full deduplication still happens below against the complete existingKeys set.
+
     const recentKeys = pipeline
       .slice()
       .sort((a, b) => b.addedDate.localeCompare(a.addedDate))
@@ -30,56 +51,81 @@ export async function POST() {
       .map(e => `- ${e.title.toLowerCase().trim()}|${e.company.toLowerCase().trim()}`);
     const existingList = recentKeys.length > 0 ? recentKeys.join('\n') : '(none yet)';
 
+    // Build a compact role query (cap at 4 role types to keep URL length reasonable)
+    const roleTerms = settings.roleTypes.slice(0, 4).map(r => `"${r}"`).join(' OR ');
+    const location = settings.location;
+
+    // Two parallel searches: ATS platforms (direct links) + broader company career pages
+    const atsQuery = `(${roleTerms}) ${location} site:greenhouse.io OR site:lever.co OR site:jobs.ashbyhq.com OR site:boards.greenhouse.io`;
+    const careerQuery = `(${roleTerms}) ${location} job opening 2026 -site:indeed.com -site:ziprecruiter.com -site:glassdoor.com`;
+
+    const [atsResults, careerResults] = await Promise.all([
+      serperSearch(atsQuery),
+      serperSearch(careerQuery),
+    ]);
+
+    // Merge and deduplicate by URL
+    const seen = new Set<string>();
+    const allResults: SerperResult[] = [];
+    for (const r of [...atsResults, ...careerResults]) {
+      if (!seen.has(r.link)) {
+        seen.add(r.link);
+        allResults.push(r);
+      }
+    }
+
+    if (allResults.length === 0) {
+      return Response.json({ error: 'No search results found. Check your Serper API key.' }, { status: 500 });
+    }
+
+    // Format results for Claude (cap at 20 to keep prompt tight)
+    const resultsText = allResults.slice(0, 20).map((r, i) =>
+      `[${i + 1}] ${r.title}\nURL: ${r.link}\n${r.snippet}${r.date ? `\nDate: ${r.date}` : ''}`
+    ).join('\n\n');
+
     const weightDesc = [
-      `Role type match (weight ${settings.fitWeights.roleTypeMatch}/5)`,
-      `Location/work model match (weight ${settings.fitWeights.locationWorkModel}/5)`,
-      `Company size ≥${settings.minEmployees.toLocaleString()} employees (weight ${settings.fitWeights.companySize}/5)`,
-      `Salary competitiveness (weight ${settings.fitWeights.salaryRange}/5)`,
-      `Keyword match for "${settings.keywords}" (weight ${settings.fitWeights.keywordMatch}/5)`,
-    ].join('\n');
+      `role type match (weight ${settings.fitWeights.roleTypeMatch}/5)`,
+      `location/work model (weight ${settings.fitWeights.locationWorkModel}/5)`,
+      `company size ≥${settings.minEmployees.toLocaleString()} employees (weight ${settings.fitWeights.companySize}/5)`,
+      `salary (weight ${settings.fitWeights.salaryRange}/5)`,
+      `keywords "${settings.keywords}" (weight ${settings.fitWeights.keywordMatch}/5)`,
+    ].join(', ');
 
-    const roleQuery = settings.roleTypes.join(' OR ');
-    const prompt = `Search for job postings matching these criteria and return results as JSON.
-
-Use this search strategy to get direct job posting links with minimal searches:
-- Search: site:greenhouse.io OR site:lever.co OR site:jobs.ashbyhq.com "${roleQuery}" "${settings.location}"
-- If that returns fewer than ${settings.maxJobCount} results, do one more search on LinkedIn Jobs.
-- Do NOT do more than 2 searches total.
-
-Criteria:
+    const prompt = `From the job search results below, select up to ${settings.maxJobCount} that best match these criteria:
 - Role types (any of): ${settings.roleTypes.join(', ')}
-- Location: ${settings.location} | Work model: ${settings.workModel}
+- Location: ${location} | Work model: ${settings.workModel}
 - Company size: ≥${settings.minEmployees.toLocaleString()} employees
 - Keywords: ${settings.keywords || '(none)'} | Exclude: ${settings.exclusions || '(none)'}
 
-Score each role 1–10 for fit:
-${weightDesc}
+Score each 1–10 for fit using: ${weightDesc}
 
-Skip roles already in pipeline:
+Skip anything already in the pipeline:
 ${existingList}
 
-Return ONLY a JSON array, no other text:
-[{"title":"","company":"","location":"","workModel":"In-office or hybrid","employeeCount":"","salary":"","url":"","posted":"","fitScore":7,"fitReason":"","snippet":""}]`;
+Search results:
+${resultsText}
+
+Return ONLY a JSON array — no other text:
+[{"title":"","company":"","location":"","workModel":"In-office or hybrid","employeeCount":"","salary":"Competitive","url":"","posted":"","fitScore":7,"fitReason":"One sentence.","snippet":"Two sentences."}]`;
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2048,
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 2 }] as any,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const fullText = message.content
+    const text = message.content
       .filter(b => b.type === 'text')
       .map(b => (b as any).text as string)
       .join('\n');
 
-    if (!fullText) {
-      return Response.json({ error: 'No text response from Claude' }, { status: 500 });
+    if (!text) {
+      return Response.json({ error: 'No response from Claude' }, { status: 500 });
     }
 
     let rawJobs: any[];
     try {
-      rawJobs = extractJSON(fullText);
+      rawJobs = extractJSON(text);
     } catch {
       return Response.json({ error: 'Could not parse job results from Claude' }, { status: 500 });
     }

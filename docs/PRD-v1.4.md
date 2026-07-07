@@ -1,13 +1,15 @@
-# PRODUCT REQUIREMENTS DOCUMENT · DRAFT v1.4
+# PRODUCT REQUIREMENTS DOCUMENT · DRAFT v1.5
 ## Job Search Agent
 *An AI-powered daily digest, pipeline tracker, and outreach drafting tool for senior AI product & strategy professionals.*
 
 | | |
 |---|---|
 | **Author** | Chris |
-| **Status** | Draft v1.4 |
-| **Last Updated** | May 2026 |
+| **Status** | Draft v1.5 |
+| **Last Updated** | July 2026 |
 | **Target Audience** | Personal / Self-use |
+
+**v1.5 Changes:** Replaced Claude built-in web_search tool with Serper.dev (Google Search API) + Claude for job discovery (Section 5, 8.1, 8.2, 8.4). Added Contacts & Activity tracking per pipeline entry (Section 6.2). Added 1-job option to Jobs per Search setting.
 
 **v1.4 Changes:** Removed Gmail integration and Google Sheets sync. Added CSV Export (Section 6.3). Updated tech stack and roadmap accordingly. Outreach drafts are now copy-to-clipboard only.
 
@@ -66,11 +68,15 @@ Key behaviors that shape design: makes final decisions quickly after seeing clea
 
 ## 5. Job Sourcing Architecture
 
-*(Unchanged from v1.3 — see original PRD for full detail.)*
+**v1 (current):** Two-step pipeline using Serper.dev + Claude.
+1. **Search** — Two parallel Serper.dev queries run against Google: one targeting ATS platforms (`greenhouse.io`, `lever.co`, `jobs.ashbyhq.com`) for direct job posting links, one broader career-page search excluding aggregators. Capped at 20 combined results. Cost: ~$0.002 per run.
+2. **Score & Format** — Results (title, URL, snippet) are passed to `claude-sonnet-4-6` (no web_search tool) with the user's criteria and fit weights. Claude selects the best matches, scores them, and returns structured JSON. Cost: ~$0.02 per run.
+- **Total per digest run: ~$0.02–0.05.** Predictable and bounded regardless of result volume.
+- Requires `SERPER_API_KEY` in addition to `ANTHROPIC_API_KEY`.
 
-**v1:** Claude web search via `web_search_20250305` tool. Zero external API keys required.
+**Why the change from v1.0–v1.4:** The original approach used Anthropic's built-in `web_search` tool in an agentic loop. After an API tool version update (`web_search_20260209`), each search call began injecting 30–50K tokens of web content into the context window per invocation. With multiple searches per run, costs reached $1–4 per digest. The Serper architecture separates search from reasoning, making each step cheap, fast, and predictable.
 
-**v2:** Adzuna API (primary) + Greenhouse/Lever public feeds (supplemental). Claude web search as fallback.
+**v2 (planned):** Adzuna API (primary) + Greenhouse/Lever public feeds (supplemental). Serper as fallback.
 
 ---
 
@@ -89,12 +95,13 @@ Key behaviors that shape design: makes final decisions quickly after seeing clea
 ### 6.2 Pipeline Management
 - **FR-P1:** All tracked roles are displayed in a sortable, filterable list view (default: newest first).
 - **FR-P2:** Each role card shows: fit score badge, title, company, location, work model, salary, date posted, and current status.
-- **FR-P3:** Expanding a card reveals: full snippet, fit reason, status picker, notes field, and action buttons.
+- **FR-P3:** Expanding a card reveals: full snippet, fit reason, status picker, notes field, Contacts & Activity section, and action buttons.
 - **FR-P4:** Status options: New, Applied, Outreach, Interview, Offer, Rejected, Passed. Status changes are immediate with no save step.
 - **FR-P5:** Notes field is free-text, auto-saved on blur.
 - **FR-P6:** The pipeline header shows a count summary by status, each clickable to filter the list.
 - **FR-P7:** Individual roles can be permanently removed from the pipeline.
 - **FR-P8:** Pipeline data persists across sessions via local JSON file storage.
+- **FR-P9 (Contacts & Activity):** Each pipeline entry supports one or more contact records. Each contact captures: contact name, contact title, last contact date, method (Email / LinkedIn / Cell), and free-text notes. Contacts can be added via '+ Add Contact & Activity', edited inline, and deleted individually. Contact data is stored in the pipeline JSON and persists across sessions.
 
 ### 6.3 CSV Export
 - **FR-E1:** An 'Export CSV' button in the pipeline header exports the currently visible roles (respects active status filter) to a `.csv` file.
@@ -137,15 +144,16 @@ Key behaviors that shape design: makes final decisions quickly after seeing clea
 ## 8. Technical Architecture
 
 ### 8.1 Stack
-- **Frontend:** React (Next.js 15 App Router, TypeScript)
-- **AI Engine:** Anthropic Claude API — `claude-sonnet-4-6` with `web_search_20250305` tool (v1); job board APIs added in v2
+- **Frontend:** React (Next.js App Router, TypeScript)
+- **Search:** Serper.dev Google Search API — two parallel queries per digest run
+- **AI Engine:** Anthropic Claude API — `claude-sonnet-4-6` for scoring/formatting (no web_search tool)
 - **State / Storage:** Local JSON files (`data/pipeline.json`, `data/settings.json`)
 - **CSV Export:** Client-side Blob + URL.createObjectURL — no server required
 - **Styling:** Tailwind CSS v4
 - **Scheduler:** node-cron (local); Vercel Cron Jobs (production)
 
 ### 8.2 Key API Calls
-- **Digest (v1):** Single Claude API call with web_search tool. Returns 5+ jobs as JSON array. Fit scores computed using user-defined weights. Excludes known titles.
+- **Digest (v1.5):** Two parallel Serper.dev searches → merged results passed to a single Claude API call (no tools) for scoring, filtering, and JSON formatting. Total cost ~$0.02–0.05 per run.
 - **Outreach Draft:** Single Claude API call (no web search). Passes job details + resume summary. Returns `{subject, body}` JSON.
 
 ### 8.3 Data Model (pipeline entry)
@@ -158,7 +166,8 @@ source  // 'web_search' | 'manual'
 
 ### 8.4 Environment Variables
 ```
-ANTHROPIC_API_KEY    — required
+ANTHROPIC_API_KEY    — required (Claude scoring + outreach)
+SERPER_API_KEY       — required (Google Search via Serper.dev)
 NEXT_PUBLIC_APP_URL  — http://localhost:3000 (local)
 ```
 
