@@ -17,7 +17,7 @@
 
 ## 1. Purpose & Problem Statement
 
-Senior AI product and strategy professionals targeting competitive in-office roles at large companies face a fragmented, time-consuming search process: job boards must be manually checked, outreach must be written from scratch for each role, and pipeline state lives in ad-hoc spreadsheets or sticky notes. No existing tool combines intelligent role discovery, pipeline tracking, personalized outreach generation, and search analytics in a single workflow.
+Senior AI product and strategy professionals targeting competitive roles face a fragmented, time-consuming search process: job boards must be manually checked, outreach must be written from scratch for each role, and pipeline state lives in ad-hoc spreadsheets or sticky notes. No existing tool combines intelligent role discovery, pipeline tracking, personalized outreach generation, and search analytics in a single workflow.
 
 This agent eliminates that friction by automating discovery (scheduled daily digest via web search), centralizing pipeline state (local JSON with CSV export), generating high-quality cold outreach on demand, and surfacing search analytics — all tuned to the user's specific criteria and background.
 
