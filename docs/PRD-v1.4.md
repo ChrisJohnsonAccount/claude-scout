@@ -50,7 +50,7 @@ This agent eliminates that friction by automating discovery (scheduled daily dig
 
 ## 3. User & Context
 
-Single user. Senior AI product and strategy leader based in Austin, TX. Targeting in-office roles at companies with 1,000+ employees. Role tracks: AI Product Manager, AI Strategy, AI GTM / Solutions, Head of AI Product, Director/VP of AI. Background spans AI product leadership (Rad AI, Hologic), management consulting (Bain), and private equity. Wharton MBA + MS CS.
+Single user. Senior AI product and strategy leader based in Austin, TX. Targeting role tracks: AI Product Manager, AI Strategy, Head of AI Product, Director/VP of AI. Background spans AI product leadership (Rad AI, Hologic), management consulting (Bain), and private equity. Wharton MBA + MS CS.
 
 Key behaviors that shape design: makes final decisions quickly after seeing clear options; prefers tight, substantive language over filler; uses Claude heavily for iterative professional document production; checks the tool daily as part of a morning job-search routine.
 
